@@ -7,14 +7,32 @@
   let error = '';
   let loading = true;
 
-  onMount(async () => {
+  async function load() {
+    // 实时查库（后端对 /api/ 响应已设 no-store），不保留任何旧快照。
+    loading = true;
     try {
       data = await api<DashboardStats>('/dashboard');
+      error = '';
     } catch (e) {
       error = e instanceof Error ? e.message : '加载失败';
     } finally {
       loading = false;
     }
+  }
+
+  function onVisible() {
+    if (document.visibilityState === 'visible') load();
+  }
+
+  onMount(() => {
+    load();
+    // 从其他页签切回时立刻再拉，保证改完机台状态后数字马上对齐。
+    window.addEventListener('focus', load);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', load);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   });
 </script>
 

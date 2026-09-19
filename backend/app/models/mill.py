@@ -7,6 +7,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 MILL_STATUSES = ("grinding", "idle", "wash")
+DEFAULT_MILL_STATUS = "idle"
+
+
+def normalize_mill_status(value) -> str | None:
+    """归一化机台状态到约定枚举；不属于枚举时返回 None。"""
+    if value is None:
+        return DEFAULT_MILL_STATUS
+    status = str(value).strip().lower()
+    return status if status in MILL_STATUSES else None
 
 
 class Mill(Base):

@@ -14,6 +14,8 @@ export async function api<T = unknown>(
 
   const res = await fetch(`/api${path}`, {
     ...options,
+    // 台账数据始终实时查库，绝不使用浏览器缓存的旧数。
+    cache: 'no-store',
     headers,
   });
 

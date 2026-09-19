@@ -5,7 +5,11 @@ from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 
 from app.database import SessionLocal
-from app.models.mill import MILL_STATUSES, Mill
+from app.models.mill import (
+    DEFAULT_MILL_STATUS,
+    Mill,
+    normalize_mill_status,
+)
 from app.models.workshop import Workshop
 from app.serializers import mill_json
 from app.utils import error
@@ -13,31 +17,32 @@ from app.utils import error
 bp = Blueprint("mills", __name__, url_prefix="/api/mills")
 
 
-def _validate(body: dict) -> str | None:
+def _validate(body: dict) -> tuple[str | None, str]:
+    """返回 (错误信息, 归一化后的状态)。校验失败时错误信息非空。"""
     workshop_id = int(body.get("workshopId") or 0)
     if workshop_id <= 0:
-        return "请选择所属车间"
+        return "请选择所属车间", DEFAULT_MILL_STATUS
 
     mill_code = str(body.get("millCode", "")).strip()
     if not mill_code:
-        return "研磨机编号不能为空"
+        return "研磨机编号不能为空", DEFAULT_MILL_STATUS
 
     pigment_base = str(body.get("pigmentBase", "")).strip()
     if not pigment_base:
-        return "色浆基料不能为空"
+        return "色浆基料不能为空", DEFAULT_MILL_STATUS
 
-    status = str(body.get("status") or "idle")
-    if status.strip().lower() not in MILL_STATUSES:
-        return "状态无效，应为 grinding / idle / wash"
+    status = normalize_mill_status(body.get("status"))
+    if status is None:
+        return "状态无效，应为 grinding / idle / wash", DEFAULT_MILL_STATUS
 
     db = SessionLocal()
     try:
         if not db.get(Workshop, workshop_id):
-            return "所属车间不存在"
+            return "所属车间不存在", DEFAULT_MILL_STATUS
     finally:
         db.close()
 
-    return None
+    return None, status
 
 
 @bp.get("")
@@ -46,8 +51,11 @@ def list_mills():
     db = SessionLocal()
     try:
         q = db.query(Mill)
-        status = request.args.get("status")
-        if status:
+        raw_status = request.args.get("status")
+        if raw_status is not None:
+            status = normalize_mill_status(raw_status)
+            if status is None:
+                return error("状态无效，应为 grinding / idle / wash", 400)
             q = q.filter(Mill.status == status)
         rows = q.order_by(Mill.id.desc()).all()
         return jsonify([mill_json(r) for r in rows])
@@ -59,7 +67,7 @@ def list_mills():
 @jwt_required()
 def create_mill():
     body = request.get_json(silent=True) or {}
-    err = _validate(body)
+    err, status = _validate(body)
     if err:
         return error(err, 400)
 
@@ -70,7 +78,7 @@ def create_mill():
             mill_code=str(body["millCode"]).strip(),
             pigment_base=str(body["pigmentBase"]).strip(),
             bowl_liters=Decimal(str(body.get("bowlLiters", 0))),
-            status=str(body.get("status") or "idle"),
+            status=status,
         )
         db.add(row)
         try:
@@ -88,7 +96,7 @@ def create_mill():
 @jwt_required()
 def update_mill(item_id: int):
     body = request.get_json(silent=True) or {}
-    err = _validate(body)
+    err, status = _validate(body)
     if err:
         return error(err, 400)
 
@@ -102,7 +110,7 @@ def update_mill(item_id: int):
         row.mill_code = str(body["millCode"]).strip()
         row.pigment_base = str(body["pigmentBase"]).strip()
         row.bowl_liters = Decimal(str(body.get("bowlLiters", 0)))
-        row.status = str(body.get("status") or "idle")
+        row.status = status
         try:
             db.commit()
         except IntegrityError:

@@ -23,13 +23,10 @@ def summary():
         since_7d = now - timedelta(days=7)
 
         workshop_total = db.scalar(select(func.count()).select_from(Workshop)) or 0
+        # 必须与 GET /api/mills?status=grinding 的行数恒等：
+        # 不 JOIN 取样表（一对多会让 COUNT 扇出偏大），只按归一化枚举精确匹配。
         grinding_mill_count = (
-            db.scalar(
-                select(func.count())
-                .select_from(Mill)
-                .outerjoin(ViscositySample, ViscositySample.mill_id == Mill.id)
-                .where(func.lower(func.trim(Mill.status)) == "grinding")
-            )
+            db.scalar(select(func.count()).select_from(Mill).where(Mill.status == "grinding"))
             or 0
         )
         samples_last_24h = (

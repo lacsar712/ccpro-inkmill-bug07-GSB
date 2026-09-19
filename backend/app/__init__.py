@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
@@ -32,6 +32,13 @@ def create_app() -> Flask:
     app.register_blueprint(mills.bp)
     app.register_blueprint(viscosity_samples.bp)
     app.register_blueprint(grind_passes.bp)
+
+    @app.after_request
+    def _no_store_api(response):
+        # 所有台账数据实时查库，禁止浏览器/中间缓存，避免切页后看到旧数。
+        if request.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/api/health")
     def health():
