@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
@@ -25,6 +25,13 @@ def create_app() -> Flask:
     @jwt.expired_token_loader
     def _expired(_jwt_header, _jwt_data):
         return jsonify({"message": "未登录或登录已过期"}), 401
+
+    @app.after_request
+    def _no_store_api(resp):
+        # 台账/统计接口一律不走缓存，确保改状态后立即拉取到最新提交值。
+        if request.path.startswith("/api/"):
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(dashboard.bp)

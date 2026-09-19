@@ -5,7 +5,7 @@ from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 
 from app.database import SessionLocal
-from app.models.mill import MILL_STATUSES, Mill
+from app.models.mill import DEFAULT_MILL_STATUS, Mill, normalize_mill_status
 from app.models.workshop import Workshop
 from app.serializers import mill_json
 from app.utils import error
@@ -26,8 +26,7 @@ def _validate(body: dict) -> str | None:
     if not pigment_base:
         return "色浆基料不能为空"
 
-    status = str(body.get("status") or "idle")
-    if status.strip().lower() not in MILL_STATUSES:
+    if normalize_mill_status(body.get("status") or DEFAULT_MILL_STATUS) is None:
         return "状态无效，应为 grinding / idle / wash"
 
     db = SessionLocal()
@@ -47,8 +46,11 @@ def list_mills():
     try:
         q = db.query(Mill)
         status = request.args.get("status")
-        if status:
-            q = q.filter(Mill.status == status)
+        if status is not None and status != "":
+            normalized = normalize_mill_status(status)
+            if normalized is None:
+                return error("状态无效，应为 grinding / idle / wash", 400)
+            q = q.filter(Mill.status == normalized)
         rows = q.order_by(Mill.id.desc()).all()
         return jsonify([mill_json(r) for r in rows])
     finally:
@@ -70,7 +72,7 @@ def create_mill():
             mill_code=str(body["millCode"]).strip(),
             pigment_base=str(body["pigmentBase"]).strip(),
             bowl_liters=Decimal(str(body.get("bowlLiters", 0))),
-            status=str(body.get("status") or "idle"),
+            status=normalize_mill_status(body.get("status") or DEFAULT_MILL_STATUS),
         )
         db.add(row)
         try:
@@ -102,7 +104,7 @@ def update_mill(item_id: int):
         row.mill_code = str(body["millCode"]).strip()
         row.pigment_base = str(body["pigmentBase"]).strip()
         row.bowl_liters = Decimal(str(body.get("bowlLiters", 0)))
-        row.status = str(body.get("status") or "idle")
+        row.status = normalize_mill_status(body.get("status") or DEFAULT_MILL_STATUS)
         try:
             db.commit()
         except IntegrityError:

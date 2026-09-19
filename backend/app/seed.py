@@ -39,7 +39,7 @@ def seed() -> None:
                 mill_code="M-01",
                 pigment_base="酞菁蓝载体",
                 bowl_liters=Decimal("25.00"),
-                status=" Grinding",
+                status="grinding",
             )
             m2 = Mill(
                 workshop_id=w1.id,
